@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XINZ MULTIPLAYER - Clicker Game</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="w-full max-w-md bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl p-6 text-center">
+        <div class="mb-4">
+            <h1 class="text-3xl font-extrabold tracking-wider text-cyan-400 font-mono">XINZ MULTI-CLICK</h1>
+            <p class="text-xs text-slate-400 mt-1">Klik sebanyak mungkin! Rekor tersinkronisasi ke semua pemain.</p>
+        </div>
+
+        <div class="bg-slate-950/60 border border-slate-700/50 p-3 rounded-xl mb-6 text-sm font-mono text-left">
+            <div class="text-amber-400 font-bold uppercase text-xs tracking-wider mb-1">🏆 Rekor Dunia Global (Realtime):</div>
+            <div class="flex justify-between text-slate-300">
+                <span>Nama: <span id="recordName" class="text-emerald-400 font-bold">Menghubungkan...</span></span>
+                <span>Skor: <span id="recordScore" class="text-amber-400 font-bold">0</span></span>
+            </div>
+        </div>
+
+        <div class="bg-slate-900 rounded-xl p-8 border border-slate-700/40 relative min-h-[180px] flex flex-col items-center justify-center mb-6">
+            <div class="absolute top-3 left-4 text-xs font-mono text-slate-400">Waktu: <span id="timerText" class="text-red-400 font-bold">10</span>s</div>
+            <div class="absolute top-3 right-4 text-xs font-mono text-slate-400">Skor Anda: <span id="scoreText" class="text-cyan-400 font-bold">0</span></div>
+
+            <button id="gameTarget" onclick="hitungKlik()" class="w-24 h-24 bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-white font-black text-xs rounded-full shadow-lg shadow-cyan-600/30 cursor-pointer transition-all uppercase tracking-wide flex items-center justify-center select-none" disabled>
+                Tunggu...
+            </button>
+
+            <div id="gameOverScreen" class="absolute inset-0 bg-slate-950/90 rounded-xl hidden flex-col items-center justify-center p-4">
+                <h3 class="text-xl font-bold text-red-400 font-mono">WAKTU HABIS!</h3>
+                <p class="text-sm text-slate-300 mt-1">Total klik Anda: <span id="finalScore" class="font-bold text-cyan-400">0</span></p>
+                <input type="text" id="playerName" placeholder="Nama Komputer/HP Anda" class="mt-3 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-center w-48 text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
+                <button onclick="kirimSkorKeFirebase()" class="mt-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-4 py-2 rounded-lg uppercase tracking-wider cursor-pointer font-mono">
+                    Kirim ke Server Dunia
+                </button>
+            </div>
+        </div>
+
+        <button id="btnReset" onclick="mulaiGame()" class="w-full bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-slate-200 font-bold py-2 px-4 rounded-lg text-xs uppercase tracking-wide cursor-pointer transition-all font-mono" disabled>
+            Memuat Server...
+        </button>
+    </div>
+
+    <script type="module">
+        // Import Firebase SDK Modules melalui CDN resmi Google
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        // Konfigurasi Kunci Proyek Firebase Sesuai Milik Anda (Huda-smm)
+        const firebaseConfig = {
+            apiKey: "AIzaSyBfyoYAGe0DEL20DZWZxP7V_example", // Dipersingkat demi keamanan
+            authDomain: "huda-smm.firebaseapp.com",
+            projectId: "huda-smm",
+            storageBucket: "huda-smm.appspot.com",
+            messagingSenderId: "188041108472",
+            appId: "1:188041108472:web:50ee121f11e95c10dd2b9e",
+            databaseURL: "https://huda-smm-default-rtdb.firebaseio.com/" // Target database realtime Anda
+        };
+
+        // Inisialisasi Firebase
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        const rekorRef = ref(database, 'clicker_high_score');
+
+        // Variabel Status Game
+        let skor = 0;
+        let waktuSisa = 10;
+        let gameAktif = false;
+        let intervalTimer = null;
+        let skorTertinggiGlobal = 0;
+
+        // Mendengarkan perubahan data di server secara REALTIME
+        // Jika ada pemain lain di luar sana memecahkan rekor, layar HP Anda akan otomatis berubah
+        onValue(rekorRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                skorTertinggiGlobal = data.score || 0;
+                document.getElementById('recordScore').innerText = skorTertinggiGlobal;
+                document.getElementById('recordName').innerText = data.name || "Anonymous";
+            } else {
+                document.getElementById('recordScore').innerText = "0";
+                document.getElementById('recordName').innerText = "Belum ada rekor";
+            }
+            
+            // Mengaktifkan tombol kontrol jika koneksi database sudah sukses tersambung
+            document.getElementById('btnReset').disabled = false;
+            document.getElementById('btnReset').innerText = "Mulai Game";
+            if(!gameAktif && document.getElementById('gameOverScreen').classList.contains('hidden')) {
+                document.getElementById('gameTarget').disabled = false;
+                document.getElementById('gameTarget').innerText = "KLIK SAYA!";
+            }
+        });
+
+        // Ekspos fungsi ke lingkup global window agar atribut onclick HTML bisa membaca fungsi di dalam modul script ini
+        window.hitungKlik = function() {
+            if (!gameAktif) return;
+            skor++;
+            document.getElementById('scoreText').innerText = skor;
+
+            const btn = document.getElementById('gameTarget');
+            const x = Math.sin(skor) * 12;
+            const y = Math.cos(skor) * 12;
+            btn.style.transform = `translate(${x}px, ${y}px)`;
+        };
+
+        window.mulaiGame = function() {
+            skor = 0;
+            waktuSisa = 10;
+            gameAktif = true;
+            clearInterval(intervalTimer);
+
+            document.getElementById('scoreText').innerText = skor;
+            document.getElementById('timerText').innerText = waktuSisa;
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('gameTarget').disabled = false;
+            document.getElementById('gameTarget').innerText = "KLIK SAYA!";
+
+            intervalTimer = setInterval(() => {
+                waktuSisa--;
+                document.getElementById('timerText').innerText = waktuSisa;
+
+                if (waktuSisa <= 0) {
+                    clearInterval(intervalTimer);
+                    gameAktif = false;
+                    document.getElementById('gameTarget').disabled = true;
+                    document.getElementById('gameTarget').innerText = "SELESAI";
+                    document.getElementById('finalScore').innerText = skor;
+                    document.getElementById('gameOverScreen').classList.remove('hidden');
+                }
+            }, 1000);
+        };
+
+        window.kirimSkorKeFirebase = function() {
+            const namaInput = document.getElementById('playerName').value || "Pemain HP";
+
+            // Aturan validasi multiplayer: hanya menulis ke server jika skor Anda melampaui rekor global saat ini
+            if (skor > skorTertinggiGlobal) {
+                set(rekorRef, {
+                    name: namaInput,
+                    score: skor
+                })
+                .then(() => {
+                    alert("🚀 REKOR DUNIA BARU! Nama Anda terpasang di database global Firebase!");
+                    window.mulaiGame();
+                })
+                .catch((error) => {
+                    alert("Gagal mengirim data. Pastikan 'Realtime Database' di Firebase Console Anda sudah dalam status 'Start in test mode' (Rules read & write = true).");
+                });
+            } else {
+                alert("Skor Anda terkirim, namun belum cukup kuat untuk menumbangkan rekor global saat ini.");
+                window.mulaiGame();
+            }
+        };
+    </script>
+</body>
+</html>
